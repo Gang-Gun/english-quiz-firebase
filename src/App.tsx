@@ -140,11 +140,12 @@ function StudentPage({
       const mode: ExamMode = isReview ? "review" : "regular";
       const result = await getStudentQuiz({ classId, studentId: student.id, mode });
       const quizWords = Array.isArray(result?.words) ? result.words : [];
+      const optionPool = Array.isArray(result?.optionPool) && result.optionPool.length ? result.optionPool : quizWords;
       if (quizWords.length === 0) {
         alert(isReview ? "복습할 오답이 없습니다!" : "출제할 단어가 없습니다.");
         return;
       }
-      setQuiz(buildQuiz(quizWords));
+      setQuiz(buildQuiz(quizWords, optionPool));
       setCurrent(0);
       setAnswers([]);
       setTypedAnswer("");

@@ -1,7 +1,9 @@
-import { collection, doc, getDoc, getDocs, limit, orderBy, query, setDoc, where } from "firebase/firestore";
+import { addDoc, collection, doc, getDoc, getDocs, limit, orderBy, query, serverTimestamp, setDoc, Timestamp, where } from "firebase/firestore";
 import { rankings, scores, settings, students, words } from "../demoData";
-import type { ClassSettings, RankingRow, ScoreRecord, Student, WordEntry } from "../domain/types";
+import type { ClassSettings, ExamMode, RankingRow, ScoreRecord, Student, WordEntry } from "../domain/types";
 import { getFirebaseClient } from "./client";
+
+const toWordEntry = (id: string, data: Record<string, unknown>): WordEntry => ({ id, ...(data as Omit<WordEntry, "id">) });
 
 const shouldUseFallback = () => import.meta.env.DEV || import.meta.env.MODE === "test";
 
@@ -116,16 +118,69 @@ export async function adminUpdateSettings(input: { classId: string; patch: Parti
   );
 }
 
-export async function getStudentQuiz(input: { classId: string; studentId: string; mode: "regular" | "review" }) {
+export async function getStudentQuiz(input: { classId: string; studentId: string; mode: ExamMode }) {
   return withFirestore(
-    () => ({ words }),
+    () => {
+      const pool = words;
+      return { words: input.mode === "review" ? pool : pool.slice(0, settings.wordCount), optionPool: pool };
+    },
     async () => {
       const client = getFirebaseClient();
-      if (!client) return { words };
+      if (!client) return { words, optionPool: words };
+
       const settingsSnap = await getDoc(doc(client.db, classPath(input.classId, "settings/current")));
       const wordCount = Math.max(1, Number(settingsSnap.data()?.wordCount ?? 20));
-      const wordsSnap = await getDocs(query(collection(client.db, classPath(input.classId, "words")), where("completed", "==", true), orderBy("number", "desc"), limit(wordCount)));
-      return { words: wordsSnap.docs.map((row) => ({ id: row.id, ...(row.data() as Omit<WordEntry, "id">) })) };
+
+      // A broad set of studied words supplies the multiple-choice distractors.
+      const completedSnap = await getDocs(
+        query(collection(client.db, classPath(input.classId, "words")), where("completed", "==", true), orderBy("number", "desc"), limit(Math.max(wordCount, 60)))
+      );
+      const completed = completedSnap.docs.map((row) => toWordEntry(row.id, row.data()));
+
+      if (input.mode === "review") {
+        const recentSnap = await getDocs(
+          query(collection(client.db, classPath(input.classId, "scores")), where("studentId", "==", input.studentId), orderBy("takenAt", "desc"), limit(30))
+        );
+        const wrong = Array.from(new Set(recentSnap.docs.flatMap((row) => (row.data().wrongWords as string[] | undefined) ?? []))).slice(0, 10);
+        const reviewWords = wrong.length
+          ? (await getDocs(query(collection(client.db, classPath(input.classId, "words")), where("english", "in", wrong)))).docs.map((row) => toWordEntry(row.id, row.data()))
+          : [];
+        return { words: reviewWords, optionPool: completed.length ? completed : reviewWords };
+      }
+
+      return { words: completed.slice(0, wordCount), optionPool: completed };
+    }
+  );
+}
+
+export async function saveResult(input: {
+  classId: string;
+  studentId: string;
+  studentName: string;
+  score: number;
+  correctWords: string[];
+  wrongWords: string[];
+  mode: ExamMode;
+}) {
+  return withFirestore(
+    () => ({ ok: true as const }),
+    async () => {
+      const client = getFirebaseClient();
+      if (!client) return { ok: true as const };
+      const now = new Date();
+      // Keys must match the fields allowed by firestore.rules for scores/create.
+      await addDoc(collection(client.db, classPath(input.classId, "scores")), {
+        studentId: input.studentId,
+        studentName: input.studentName,
+        score: input.score,
+        correctWords: input.correctWords,
+        wrongWords: input.wrongWords,
+        mode: input.mode,
+        takenAt: Timestamp.fromDate(now),
+        takenAtIso: now.toISOString(),
+        createdAt: serverTimestamp()
+      });
+      return { ok: true as const };
     }
   );
 }

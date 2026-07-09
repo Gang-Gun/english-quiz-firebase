@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
-import { classId, rankings as fallbackRankings, scores as fallbackScores, settings as fallbackSettings, words } from "./demoData";
-import { calculateWrongWordProgress } from "./domain/quiz";
-import type { ClassSettings, RankingRow, ScoreRecord, Student } from "./domain/types";
-import { adminGetDashboard, adminUpdateSettings, getStudentDashboard, studentLogin } from "./firebase/contracts";
+import { classId, rankings as fallbackRankings, scores as fallbackScores, settings as fallbackSettings } from "./demoData";
+import { buildQuiz, calculateWrongWordProgress, scoreAnswers } from "./domain/quiz";
+import type { QuizQuestion, QuizType } from "./domain/quiz";
+import type { ClassSettings, ExamMode, QuizAnswer, RankingRow, ScoreRecord, Student } from "./domain/types";
+import { adminGetDashboard, adminUpdateSettings, getStudentDashboard, getStudentQuiz, saveResult, studentLogin } from "./firebase/contracts";
 import { hasFirebaseConfig } from "./firebase/config";
 import "./styles.css";
 
@@ -29,6 +30,12 @@ const periodLabels: Record<Period, string> = {
   week: "7일",
   month: "30일",
   all: "전체"
+};
+
+const quizTypeLabels: Record<QuizType, string> = {
+  "en-ko": "영 → 한",
+  "ko-en": "한 → 영",
+  subjective: "주관식"
 };
 
 function initialPage(): Page {
@@ -61,7 +68,11 @@ function StudentPage({
   const [busy, setBusy] = useState(false);
   const [reviewMode, setReviewMode] = useState(false);
   const [resultScore, setResultScore] = useState<number | null>(null);
-  const [quizWords, setQuizWords] = useState<string[]>([]);
+  const [resultWrong, setResultWrong] = useState<string[]>([]);
+  const [quiz, setQuiz] = useState<QuizQuestion[]>([]);
+  const [current, setCurrent] = useState(0);
+  const [answers, setAnswers] = useState<QuizAnswer[]>([]);
+  const [typedAnswer, setTypedAnswer] = useState("");
 
   const latest = student ? data.scores.find((score) => score.studentId === student.id) : undefined;
   const wrongWords = useMemo(() => (student ? calculateWrongWordProgress(student.id, data.scores) : []), [data.scores, student]);
@@ -113,7 +124,8 @@ function StudentPage({
     void onRefresh(student?.id);
   };
 
-  const startQuiz = (isReview: boolean) => {
+  const startQuiz = async (isReview: boolean) => {
+    if (!student) return;
     if (isReview && wrongWords.length === 0) {
       alert("복습할 오답이 없습니다!");
       return;
@@ -122,15 +134,67 @@ function StudentPage({
       alert("시험 가능 시간이 아닙니다.");
       return;
     }
-    setQuizWords(isReview ? wrongWords : words.slice(0, data.settings.wordCount).map((word) => word.english));
-    setReviewMode(isReview);
-    setResultScore(null);
-    setView("quiz");
+
+    setBusy(true);
+    try {
+      const mode: ExamMode = isReview ? "review" : "regular";
+      const result = await getStudentQuiz({ classId, studentId: student.id, mode });
+      const quizWords = Array.isArray(result?.words) ? result.words : [];
+      const optionPool = Array.isArray(result?.optionPool) && result.optionPool.length ? result.optionPool : quizWords;
+      if (quizWords.length === 0) {
+        alert(isReview ? "복습할 오답이 없습니다!" : "출제할 단어가 없습니다.");
+        return;
+      }
+      setQuiz(buildQuiz(quizWords, optionPool));
+      setCurrent(0);
+      setAnswers([]);
+      setTypedAnswer("");
+      setReviewMode(isReview);
+      setResultScore(null);
+      setResultWrong([]);
+      setView("quiz");
+    } catch {
+      alert("시험을 불러오지 못했습니다. 잠시 후 다시 시도해주세요.");
+    } finally {
+      setBusy(false);
+    }
   };
 
-  const finishQuiz = () => {
-    setResultScore(reviewMode ? 100 : latest?.score ?? 93);
+  const submitAnswer = async (choice: string) => {
+    const question = quiz[current];
+    if (!question) return;
+
+    const nextAnswers = [...answers, { word: question.word, choice, correct: question.answer }];
+    setTypedAnswer("");
+
+    if (current + 1 < quiz.length) {
+      setAnswers(nextAnswers);
+      setCurrent(current + 1);
+      return;
+    }
+
+    const graded = scoreAnswers(nextAnswers);
+    setAnswers(nextAnswers);
+    setResultScore(graded.score);
+    setResultWrong(graded.wrongWords);
     setView("result");
+
+    if (student) {
+      try {
+        await saveResult({
+          classId,
+          studentId: student.id,
+          studentName: student.name,
+          score: graded.score,
+          correctWords: graded.correctWords,
+          wrongWords: graded.wrongWords,
+          mode: reviewMode ? "review" : "regular"
+        });
+        void onRefresh(student.id);
+      } catch {
+        alert("점수 저장에 실패했습니다. 새로고침 후 확인해주세요.");
+      }
+    }
   };
 
   const backToDash = () => {
@@ -227,42 +291,59 @@ function StudentPage({
           </div>
 
           <div className="d-grid gap-2">
-            <button className="btn btn-success btn-custom" id="regBtn" onClick={() => startQuiz(false)}>
-              정규 시험 시작
+            <button className="btn btn-success btn-custom" id="regBtn" onClick={() => void startQuiz(false)} disabled={busy}>
+              {busy ? "불러오는 중..." : "정규 시험 시작"}
             </button>
-            <button className="btn btn-outline-danger btn-custom" id="reviewBtn" onClick={() => startQuiz(true)}>
+            <button className="btn btn-outline-danger btn-custom" id="reviewBtn" onClick={() => void startQuiz(true)} disabled={busy}>
               오답 재시험
             </button>
           </div>
         </div>
       )}
 
-      {view === "quiz" && (
+      {view === "quiz" && quiz[current] && (
         <div id="quizSection">
           <div className="card p-4 shadow">
-            <div className="text-end mb-2 small text-muted" id="qNumber">
-              1 / {Math.min(data.settings.wordCount, 10)}
+            <div className="d-flex justify-content-between mb-2 small text-muted">
+              <span className="badge bg-light text-secondary border">{quizTypeLabels[quiz[current].type]}</span>
+              <span id="qNumber">
+                {current + 1} / {quiz.length}
+              </span>
             </div>
             <h4 id="questionText" className="text-center fw-bold mb-5 py-3">
-              {quizWords[0] ?? words[0].english}
+              {quiz[current].prompt}
             </h4>
-            <div id="optionsArea" className="d-grid gap-2">
-              {["제공하다", "개발하다", "알리다", "허락하다"].map((option) => (
-                <button type="button" className="btn btn-outline-secondary p-3 border-2 mb-2 fw-medium option-btn" onClick={finishQuiz} key={option}>
-                  {option}
+
+            {quiz[current].type === "subjective" ? (
+              <form
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  if (!typedAnswer.trim()) return;
+                  void submitAnswer(typedAnswer);
+                }}
+              >
+                <input
+                  type="text"
+                  id="subjectiveInput"
+                  className="form-control text-center mb-3 py-3 shadow-none border-light"
+                  placeholder="정답 입력"
+                  autoFocus
+                  value={typedAnswer}
+                  onChange={(event) => setTypedAnswer(event.target.value)}
+                />
+                <button id="nextBtn" type="submit" className="btn btn-primary btn-custom w-100" disabled={!typedAnswer.trim()}>
+                  제출
                 </button>
-              ))}
-            </div>
-            <input
-              type="text"
-              id="subjectiveInput"
-              className="form-control text-center mb-3 py-3 shadow-none border-light"
-              placeholder="정답 입력"
-              style={{ display: "none" }}
-            />
-            <button id="nextBtn" className="btn btn-primary btn-custom w-100" onClick={finishQuiz} style={{ display: "none" }}>
-              다음
-            </button>
+              </form>
+            ) : (
+              <div id="optionsArea" className="d-grid gap-2">
+                {quiz[current].options.map((option) => (
+                  <button type="button" className="btn btn-outline-secondary p-3 border-2 mb-2 fw-medium option-btn" onClick={() => void submitAnswer(option)} key={option}>
+                    {option}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -272,6 +353,18 @@ function StudentPage({
           <div className="card p-4 text-center border-0 shadow">
             <h6 className="text-muted mb-2">{reviewMode ? "오답 재시험 완료" : "정규시험 완료"}</h6>
             <h1 className="fw-bold mb-4 text-primary">{resultScore}점</h1>
+            {resultWrong.length > 0 && (
+              <div className="mb-4 text-start">
+                <h6 className="text-muted small">틀린 단어</h6>
+                <div id="resultWrongWords">
+                  {resultWrong.map((word) => (
+                    <span className="wrong-word" key={word}>
+                      {word}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
             <button className="btn btn-primary btn-custom w-100 shadow-sm" onClick={backToDash}>
               대시보드로
             </button>

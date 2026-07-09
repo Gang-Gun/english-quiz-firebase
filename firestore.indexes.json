@@ -7,6 +7,14 @@
         { "fieldPath": "studentId", "order": "ASCENDING" },
         { "fieldPath": "takenAt", "order": "DESCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "words",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "completed", "order": "ASCENDING" },
+        { "fieldPath": "number", "order": "DESCENDING" }
+      ]
     }
   ],
   "fieldOverrides": []

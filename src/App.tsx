@@ -22,6 +22,8 @@ const defaultDashboard: DashboardData = {
   rankings: fallbackRankings
 };
 
+const adminAccessCode = import.meta.env.VITE_ADMIN_ACCESS_CODE || "1223";
+
 const periodLabels: Record<Period, string> = {
   day: "오늘",
   week: "7일",
@@ -59,6 +61,7 @@ function StudentPage({
   const [busy, setBusy] = useState(false);
   const [reviewMode, setReviewMode] = useState(false);
   const [resultScore, setResultScore] = useState<number | null>(null);
+  const [quizWords, setQuizWords] = useState<string[]>([]);
 
   const latest = student ? data.scores.find((score) => score.studentId === student.id) : undefined;
   const wrongWords = useMemo(() => (student ? calculateWrongWordProgress(student.id, data.scores) : []), [data.scores, student]);
@@ -66,6 +69,13 @@ function StudentPage({
   const login = async (isAuto = false) => {
     const id = studentId.trim();
     if (!id) return;
+
+    if (id === adminAccessCode) {
+      sessionStorage.setItem("voca_admin_code", id);
+      setStudentId("");
+      onAdmin();
+      return;
+    }
 
     if (!isAuto) setBusy(true);
     try {
@@ -112,6 +122,7 @@ function StudentPage({
       alert("시험 가능 시간이 아닙니다.");
       return;
     }
+    setQuizWords(isReview ? wrongWords : words.slice(0, data.settings.wordCount).map((word) => word.english));
     setReviewMode(isReview);
     setResultScore(null);
     setView("quiz");
@@ -233,7 +244,7 @@ function StudentPage({
               1 / {Math.min(data.settings.wordCount, 10)}
             </div>
             <h4 id="questionText" className="text-center fw-bold mb-5 py-3">
-              {words[0].english}
+              {quizWords[0] ?? words[0].english}
             </h4>
             <div id="optionsArea" className="d-grid gap-2">
               {["제공하다", "개발하다", "알리다", "허락하다"].map((option) => (
@@ -430,6 +441,10 @@ export default function App() {
     if (sessionStorage.getItem("voca_admin_code")) return true;
     const code = prompt("관리자 접속 코드를 입력하세요.");
     if (!code?.trim()) return false;
+    if (code.trim() !== adminAccessCode) {
+      alert("관리자 접속 코드를 확인하세요.");
+      return false;
+    }
     sessionStorage.setItem("voca_admin_code", code.trim());
     return true;
   };

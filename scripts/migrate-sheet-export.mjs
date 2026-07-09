@@ -87,24 +87,6 @@ function transformSpreadsheetExport(source) {
     }
   }
 
-  const historyRows = (source.sheets["성적기록"] ?? []).slice(1);
-  for (const row of historyRows) {
-    const studentId = text(row[1]);
-    if (!studentId || !text(row[0])) continue;
-    const duplicate = scoreRecords.some((record) => record.studentId === studentId && record.takenAt === toIso(row[0]));
-    if (duplicate) continue;
-    scoreRecords.push({
-      id: `${studentId}-${scoreRecords.length + 1}`,
-      studentId,
-      studentName: text(row[2]),
-      score: numberValue(row[3]),
-      correctWords: [],
-      wrongWords: splitWords(row[6]),
-      mode: "regular",
-      takenAt: toIso(row[0])
-    });
-  }
-
   return {
     classId: source.classId,
     students,

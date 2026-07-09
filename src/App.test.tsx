@@ -50,22 +50,18 @@ describe("App", () => {
     expect(screen.getByRole("button", { name: "오답 재시험" })).toBeInTheDocument();
   });
 
-  it("opens admin only after a hidden prompt code is entered", async () => {
-    vi.spyOn(window, "prompt").mockReturnValue("teacher-code");
+  it("opens admin from the hidden student-id code path", async () => {
     render(<App />);
+    fireEvent.change(screen.getByPlaceholderText("학번 입력"), { target: { value: "1223" } });
+    fireEvent.click(screen.getByRole("button", { name: "로그인" }));
 
-    act(() => {
-      window.location.hash = "#admin";
-      window.dispatchEvent(new HashChangeEvent("hashchange"));
-    });
-
-    await waitFor(() => expect(screen.getByText("학급 관리")).toBeInTheDocument());
-    expect(sessionStorage.getItem("voca_admin_code")).toBe("teacher-code");
+    expect(await screen.findByText("학급 관리")).toBeInTheDocument();
+    expect(sessionStorage.getItem("voca_admin_code")).toBe("1223");
     expect(screen.getByText("학습왕(정규 점수)")).toBeInTheDocument();
   });
 
   it("refreshes admin data without leaving the admin page", async () => {
-    vi.spyOn(window, "prompt").mockReturnValue("teacher-code");
+    vi.spyOn(window, "prompt").mockReturnValue("1223");
     window.location.hash = "#admin";
     render(<App />);
 

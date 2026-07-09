@@ -43,28 +43,54 @@ describe("primaryMeaning", () => {
 });
 
 describe("buildQuiz", () => {
-  const pool: WordEntry[] = [
-    { id: "1", number: 1, english: "provide", meaning: "[동] 제공하다, 공급하다", completed: true },
-    { id: "2", number: 2, english: "develop", meaning: "[동] 개발하다, 발전시키다", completed: true },
-    { id: "3", number: 3, english: "service", meaning: "[명] 서비스, 봉사", completed: true }
-  ];
+  const words: WordEntry[] = Array.from({ length: 10 }, (_, i) => ({
+    id: String(i + 1),
+    number: i + 1,
+    english: `word${i + 1}`,
+    meaning: `[동] 뜻${i + 1}, 별칭${i + 1}`,
+    completed: true
+  }));
 
-  it("builds one question per word, each with its correct meaning among the options", () => {
-    const quiz = buildQuiz(["provide", "develop", "service"], pool);
+  // Deterministic rng so the type distribution and options are assertable.
+  const rng = () => 0;
 
-    expect(quiz).toHaveLength(3);
-    for (const question of quiz) {
-      expect(question.options).toContain(question.correct);
-    }
-    expect(quiz[0]).toMatchObject({ word: "provide", correct: "제공하다" });
+  it("builds one question per word using the english headword as the identifier", () => {
+    const quiz = buildQuiz(words, words, rng);
+    expect(quiz).toHaveLength(10);
+    expect(new Set(quiz.map((q) => q.word))).toEqual(new Set(words.map((w) => w.english)));
   });
 
-  it("limits the number of options and never duplicates the correct answer", () => {
-    const quiz = buildQuiz(["provide"], pool, 4);
+  it("distributes question types 40% en-ko, 40% ko-en, 20% subjective", () => {
+    const quiz = buildQuiz(words, words, rng);
+    const counts = quiz.reduce<Record<string, number>>((acc, q) => {
+      acc[q.type] = (acc[q.type] ?? 0) + 1;
+      return acc;
+    }, {});
+    expect(counts).toEqual({ "en-ko": 4, "ko-en": 4, subjective: 2 });
+  });
 
-    expect(quiz[0].options.length).toBeLessThanOrEqual(4);
-    const occurrences = quiz[0].options.filter((option) => option === "제공하다").length;
-    expect(occurrences).toBe(1);
+  it("puts the correct answer among the options for multiple-choice questions", () => {
+    const quiz = buildQuiz(words, words, rng);
+    for (const question of quiz) {
+      if (question.type === "subjective") {
+        expect(question.options).toHaveLength(0);
+      } else {
+        expect(question.options).toContain(question.answer);
+        expect(question.options.length).toBeLessThanOrEqual(4);
+        expect(question.options.filter((option) => option === question.answer)).toHaveLength(1);
+      }
+    }
+  });
+
+  it("asks for the english word in ko-en and subjective questions", () => {
+    const quiz = buildQuiz(words, words, rng);
+    for (const question of quiz) {
+      if (question.type === "ko-en" || question.type === "subjective") {
+        expect(question.answer).toMatch(/^word\d+$/);
+      } else {
+        expect(question.answer).toMatch(/^뜻\d+$/);
+      }
+    }
   });
 });
 

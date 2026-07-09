@@ -50,6 +50,47 @@ describe("App", () => {
     expect(screen.getByRole("button", { name: "오답 재시험" })).toBeInTheDocument();
   });
 
+  it("walks through every quiz question instead of scoring on the first click", async () => {
+    render(<App />);
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "로그인" }));
+    });
+    await screen.findByText("권도엽");
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "정규 시험 시작" }));
+    });
+
+    // Quiz starts on the first of three demo questions.
+    expect(await screen.findByText(/1 \/ 3/)).toBeInTheDocument();
+
+    const answerCurrent = async () => {
+      const option = screen.getAllByRole("button").find((button) => button.classList.contains("option-btn"));
+      if (option) {
+        await act(async () => {
+          fireEvent.click(option);
+        });
+        return;
+      }
+      fireEvent.change(screen.getByPlaceholderText("정답 입력"), { target: { value: "provide" } });
+      await act(async () => {
+        fireEvent.click(screen.getByRole("button", { name: "제출" }));
+      });
+    };
+
+    // The reported bug: one click ended the quiz. It must now advance instead.
+    await answerCurrent();
+    expect(screen.getByText(/2 \/ 3/)).toBeInTheDocument();
+
+    await answerCurrent();
+    expect(screen.getByText(/3 \/ 3/)).toBeInTheDocument();
+
+    // Only after the last question do we reach the score.
+    await answerCurrent();
+    expect(await screen.findByText(/점$/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "대시보드로" })).toBeInTheDocument();
+  });
+
   it("opens admin from the hidden student-id code path", async () => {
     render(<App />);
     fireEvent.change(screen.getByPlaceholderText("학번 입력"), { target: { value: "1223" } });

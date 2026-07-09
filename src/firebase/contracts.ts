@@ -1,7 +1,7 @@
 import { collection, doc, getDoc, getDocs, limit, orderBy, query, setDoc, where } from "firebase/firestore";
 import { rankings, scores, settings, students, words } from "../demoData";
-import type { ClassSettings, RankingRow, ScoreRecord, Student, WordEntry } from "../domain/types";
-import { getFirebaseClient } from "./client";
+import type { ClassSettings, ExamMode, RankingRow, ScoreRecord, Student, WordEntry } from "../domain/types";
+import { callable, getFirebaseClient } from "./client";
 
 const shouldUseFallback = () => import.meta.env.DEV || import.meta.env.MODE === "test";
 
@@ -116,16 +116,34 @@ export async function adminUpdateSettings(input: { classId: string; patch: Parti
   );
 }
 
-export async function getStudentQuiz(input: { classId: string; studentId: string; mode: "regular" | "review" }) {
+export async function getStudentQuiz(input: { classId: string; studentId: string; mode: ExamMode }) {
   return withFirestore(
-    () => ({ words }),
+    () => ({ words: input.mode === "review" ? words : words.slice(0, settings.wordCount) }),
     async () => {
-      const client = getFirebaseClient();
-      if (!client) return { words };
-      const settingsSnap = await getDoc(doc(client.db, classPath(input.classId, "settings/current")));
-      const wordCount = Math.max(1, Number(settingsSnap.data()?.wordCount ?? 20));
-      const wordsSnap = await getDocs(query(collection(client.db, classPath(input.classId, "words")), where("completed", "==", true), orderBy("number", "desc"), limit(wordCount)));
-      return { words: wordsSnap.docs.map((row) => ({ id: row.id, ...(row.data() as Omit<WordEntry, "id">) })) };
+      const fn = callable<typeof input, { words: WordEntry[] }>("getStudentQuiz");
+      if (!fn) return { words };
+      const result = await fn(input);
+      return { words: Array.isArray(result.data?.words) ? result.data.words : [] };
+    }
+  );
+}
+
+export async function saveResult(input: {
+  classId: string;
+  studentId: string;
+  studentName: string;
+  score: number;
+  correctWords: string[];
+  wrongWords: string[];
+  mode: ExamMode;
+}) {
+  return withFirestore(
+    () => ({ ok: true as const }),
+    async () => {
+      const fn = callable<typeof input, { ok: boolean }>("saveResult");
+      if (!fn) return { ok: true as const };
+      const result = await fn(input);
+      return result.data ?? { ok: true as const };
     }
   );
 }

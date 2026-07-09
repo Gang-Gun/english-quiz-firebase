@@ -1,11 +1,11 @@
 # 2학년 4반 영어시험
 
-기존 Google Apps Script HTML의 화면 구조와 색상 흐름을 유지한 GitHub Pages + Firebase 서버 버전입니다. 메인 화면은 GitHub Pages에서 제공하고, Firebase는 Functions/Firestore 서버 역할만 맡습니다.
+기존 Google Apps Script HTML의 화면 구조와 색상 흐름을 유지한 GitHub Pages + Firebase Spark 버전입니다. 메인 화면은 GitHub Pages에서 제공하고, Firebase는 Firestore 데이터 저장소로만 사용합니다.
 
 ## 구성
 
 - `src/`: GitHub Pages에 올라갈 React/Vite 학생/관리자 화면
-- `functions/`: Firebase Callable Functions 서버
+- `functions/`: Blaze 플랜으로 올릴 때 사용할 수 있는 서버 함수 코드. Spark 운영에서는 배포하지 않습니다.
 - `firestore.rules`: 클라이언트 직접 읽기/쓰기를 막고 서버 함수 중심으로 운영하는 규칙
 - `scripts/`: Google Sheet export를 Firestore import JSON으로 바꾸고 Firestore에 시드하는 도구
 - `.github/workflows/deploy-pages.yml`: `main` push 시 GitHub Pages 자동 배포
@@ -33,9 +33,11 @@ npm run migrate:sheet
 - `work/sheet-export.json`
 - `work/firestore-import.json`
 
-## Firebase 서버
+## Firebase Spark 백엔드
 
 Firebase 프로젝트는 `english-79a0a`를 사용합니다. Firebase Hosting은 사용하지 않습니다.
+
+Spark 플랜에서는 Cloud Functions를 배포할 수 없으므로 GitHub Pages 앱이 Firestore를 직접 읽고 씁니다. Firestore rules는 학생/단어/성적/설정 접근을 앱 사용에 맞게 열어둔 상태입니다.
 
 Firestore 시드는 Firebase 로그인과 프로젝트 설정 뒤 실행합니다.
 
@@ -49,7 +51,7 @@ npm run seed:firestore
 ```
 
 `functions/.env`의 `ADMIN_ACCESS_CODE`는 브라우저 코드에 넣지 않습니다.
-Firebase Functions 배포에는 Firebase Blaze(pay-as-you-go) 플랜이 필요합니다. Spark 플랜에서는 Firestore rules/indexes와 데이터 시드는 가능하지만 Functions 배포는 막힙니다.
+Firebase Functions 배포에는 Firebase Blaze(pay-as-you-go) 플랜이 필요합니다. Spark 운영에서는 Functions를 배포하지 않습니다.
 
 ## GitHub Pages
 

@@ -2,22 +2,65 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-    function isSignedIn() {
-      return request.auth != null;
-    }
-
-    function isAdmin() {
-      return isSignedIn() && exists(/databases/$(database)/documents/admins/$(request.auth.uid));
-    }
-
-    match /admins/{uid} {
-      allow read: if request.auth.uid == uid;
+    match /classes/{classId} {
+      allow read: if true;
       allow write: if false;
+
+      match /students/{studentId} {
+        allow read: if true;
+        allow write: if false;
+      }
+
+      match /words/{wordId} {
+        allow read: if true;
+        allow write: if false;
+      }
+
+      match /rankings/{docId} {
+        allow read: if true;
+        allow write: if false;
+      }
+
+      match /settings/current {
+        allow read: if true;
+        allow update: if request.resource.data.keys().hasOnly([
+          "examStatus",
+          "wordCount",
+          "lastWordNumber",
+          "reviewEnabled"
+        ])
+        && request.resource.data.examStatus in ["ON", "OFF"]
+        && request.resource.data.wordCount is int
+        && request.resource.data.wordCount >= 1
+        && request.resource.data.wordCount <= 100;
+        allow create, delete: if false;
+      }
+
+      match /scores/{scoreId} {
+        allow read: if true;
+        allow create: if request.resource.data.keys().hasOnly([
+          "studentId",
+          "studentName",
+          "score",
+          "correctWords",
+          "wrongWords",
+          "mode",
+          "takenAt",
+          "takenAtIso",
+          "createdAt"
+        ])
+        && request.resource.data.studentId is string
+        && request.resource.data.studentName is string
+        && request.resource.data.score is number
+        && request.resource.data.score >= 0
+        && request.resource.data.score <= 100
+        && request.resource.data.mode in ["regular", "review"];
+        allow update, delete: if false;
+      }
     }
 
-    match /classes/{classId}/{document=**} {
-      allow read: if isAdmin();
-      allow write: if false;
+    match /{document=**} {
+      allow read, write: if false;
     }
   }
 }

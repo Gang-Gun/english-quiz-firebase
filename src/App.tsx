@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { classId, rankings as fallbackRankings, scores as fallbackScores, settings as fallbackSettings, words } from "./demoData";
-import { calculateWrongWordProgress } from "./domain/quiz";
-import type { ClassSettings, RankingRow, ScoreRecord, Student } from "./domain/types";
+import { buildQuiz, calculateWrongWordProgress, scoreAnswers } from "./domain/quiz";
+import type { QuizQuestion } from "./domain/quiz";
+import type { ClassSettings, QuizAnswer, RankingRow, ScoreRecord, Student } from "./domain/types";
 import { adminGetDashboard, adminUpdateSettings, getStudentDashboard, studentLogin } from "./firebase/contracts";
 import { hasFirebaseConfig } from "./firebase/config";
 import "./styles.css";
@@ -61,7 +62,9 @@ function StudentPage({
   const [busy, setBusy] = useState(false);
   const [reviewMode, setReviewMode] = useState(false);
   const [resultScore, setResultScore] = useState<number | null>(null);
-  const [quizWords, setQuizWords] = useState<string[]>([]);
+  const [quiz, setQuiz] = useState<QuizQuestion[]>([]);
+  const [current, setCurrent] = useState(0);
+  const [answers, setAnswers] = useState<QuizAnswer[]>([]);
 
   const latest = student ? data.scores.find((score) => score.studentId === student.id) : undefined;
   const wrongWords = useMemo(() => (student ? calculateWrongWordProgress(student.id, data.scores) : []), [data.scores, student]);
@@ -122,14 +125,28 @@ function StudentPage({
       alert("시험 가능 시간이 아닙니다.");
       return;
     }
-    setQuizWords(isReview ? wrongWords : words.slice(0, data.settings.wordCount).map((word) => word.english));
+    const selectedWords = isReview ? wrongWords : words.slice(0, data.settings.wordCount).map((word) => word.english);
+    setQuiz(buildQuiz(selectedWords, words));
+    setCurrent(0);
+    setAnswers([]);
     setReviewMode(isReview);
     setResultScore(null);
     setView("quiz");
   };
 
-  const finishQuiz = () => {
-    setResultScore(reviewMode ? 100 : latest?.score ?? 93);
+  const answerQuestion = (choice: string) => {
+    const question = quiz[current];
+    if (!question) return;
+
+    const nextAnswers = [...answers, { word: question.word, choice, correct: question.correct }];
+    setAnswers(nextAnswers);
+
+    if (current + 1 < quiz.length) {
+      setCurrent(current + 1);
+      return;
+    }
+
+    setResultScore(scoreAnswers(nextAnswers).score);
     setView("result");
   };
 
@@ -237,32 +254,22 @@ function StudentPage({
         </div>
       )}
 
-      {view === "quiz" && (
+      {view === "quiz" && quiz[current] && (
         <div id="quizSection">
           <div className="card p-4 shadow">
             <div className="text-end mb-2 small text-muted" id="qNumber">
-              1 / {Math.min(data.settings.wordCount, 10)}
+              {current + 1} / {quiz.length}
             </div>
             <h4 id="questionText" className="text-center fw-bold mb-5 py-3">
-              {quizWords[0] ?? words[0].english}
+              {quiz[current].word}
             </h4>
             <div id="optionsArea" className="d-grid gap-2">
-              {["제공하다", "개발하다", "알리다", "허락하다"].map((option) => (
-                <button type="button" className="btn btn-outline-secondary p-3 border-2 mb-2 fw-medium option-btn" onClick={finishQuiz} key={option}>
+              {quiz[current].options.map((option) => (
+                <button type="button" className="btn btn-outline-secondary p-3 border-2 mb-2 fw-medium option-btn" onClick={() => answerQuestion(option)} key={option}>
                   {option}
                 </button>
               ))}
             </div>
-            <input
-              type="text"
-              id="subjectiveInput"
-              className="form-control text-center mb-3 py-3 shadow-none border-light"
-              placeholder="정답 입력"
-              style={{ display: "none" }}
-            />
-            <button id="nextBtn" className="btn btn-primary btn-custom w-100" onClick={finishQuiz} style={{ display: "none" }}>
-              다음
-            </button>
           </div>
         </div>
       )}

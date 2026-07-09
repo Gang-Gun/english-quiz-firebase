@@ -1,6 +1,6 @@
 # 2학년 4반 영어시험
 
-기존 Google Apps Script HTML의 화면 구조와 색상 흐름을 유지한 GitHub Pages + Firebase 버전입니다.
+기존 Google Apps Script HTML의 화면 구조와 색상 흐름을 유지한 GitHub Pages + Firebase 서버 버전입니다. 메인 화면은 GitHub Pages에서 제공하고, Firebase는 Functions/Firestore 서버 역할만 맡습니다.
 
 ## 구성
 
@@ -33,16 +33,18 @@ npm run migrate:sheet
 - `work/sheet-export.json`
 - `work/firestore-import.json`
 
-## Firestore 시드
+## Firebase 서버
 
-Firebase 로그인과 프로젝트 설정 뒤 실행합니다.
+Firebase 프로젝트는 `english-79a0a`를 사용합니다. Firebase Hosting은 사용하지 않습니다.
+
+Firestore 시드는 Firebase 로그인과 프로젝트 설정 뒤 실행합니다.
 
 ```bash
 copy .firebaserc.example .firebaserc
 copy functions/.env.example functions/.env
 npx firebase login
 npx firebase deploy --only functions,firestore:rules
-$env:FIREBASE_PROJECT_ID="YOUR_FIREBASE_PROJECT_ID"
+$env:FIREBASE_PROJECT_ID="english-79a0a"
 npm run seed:firestore
 ```
 

@@ -47,6 +47,7 @@ npm run seed:firestore
 ```
 
 `functions/.env`의 `ADMIN_ACCESS_CODE`는 브라우저 코드에 넣지 않습니다.
+Firebase Functions 배포에는 Firebase Blaze(pay-as-you-go) 플랜이 필요합니다. Spark 플랜에서는 Firestore rules/indexes와 데이터 시드는 가능하지만 Functions 배포는 막힙니다.
 
 ## GitHub Pages
 

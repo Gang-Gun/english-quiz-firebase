@@ -1,7 +1,8 @@
 import { cert, getApps, initializeApp } from "firebase-admin/app";
 import { getFirestore, Timestamp } from "firebase-admin/firestore";
 import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { homedir } from "node:os";
+import { join, resolve } from "node:path";
 
 const [inputPath, projectIdArg] = process.argv.slice(2);
 
@@ -23,7 +24,8 @@ function credentialFromEnv() {
 }
 
 if (!getApps().length) {
-  initializeApp({ projectId, credential: credentialFromEnv() });
+  const credential = credentialFromEnv();
+  initializeApp(credential ? { projectId, credential } : { projectId });
 }
 
 const db = getFirestore();
@@ -41,6 +43,119 @@ async function writeBatches(items, writer) {
     for (const item of items.slice(index, index + 400)) writer(batch, item);
     await batch.commit();
   }
+}
+
+function firestoreValue(value) {
+  if (value === null || value === undefined) return { nullValue: null };
+  if (value instanceof Date) return { timestampValue: value.toISOString() };
+  if (typeof value === "boolean") return { booleanValue: value };
+  if (typeof value === "number") {
+    return Number.isInteger(value) ? { integerValue: String(value) } : { doubleValue: value };
+  }
+  if (typeof value === "string") return { stringValue: value };
+  if (Array.isArray(value)) return { arrayValue: { values: value.map(firestoreValue) } };
+  if (typeof value === "object") {
+    return { mapValue: { fields: Object.fromEntries(Object.entries(value).map(([key, item]) => [key, firestoreValue(item)])) } };
+  }
+  return { stringValue: String(value) };
+}
+
+function firestoreFields(value) {
+  return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, firestoreValue(item)]));
+}
+
+function firebaseToolsConfigPath() {
+  return process.env.FIREBASE_TOOLS_CONFIG || join(homedir(), ".config", "configstore", "firebase-tools.json");
+}
+
+async function accessTokenFromFirebaseTools() {
+  const config = JSON.parse(readFileSync(firebaseToolsConfigPath(), "utf8"));
+  const refreshToken = config.tokens?.refresh_token;
+  if (!refreshToken) throw new Error("Firebase CLI refresh token not found. Run firebase login first.");
+
+  const body = new URLSearchParams({
+    client_id: "563584335869-fgrhgmd47bqnekij5i8b5pr03ho849e6.apps.googleusercontent.com",
+    client_secret: "j9iVZfS8kkCEFUPaAeJV0sAi",
+    refresh_token: refreshToken,
+    grant_type: "refresh_token"
+  });
+  const response = await fetch("https://oauth2.googleapis.com/token", {
+    method: "POST",
+    headers: { "content-type": "application/x-www-form-urlencoded" },
+    body
+  });
+  if (!response.ok) throw new Error(`Could not refresh Firebase CLI access token: ${response.status} ${await response.text()}`);
+  const json = await response.json();
+  return json.access_token;
+}
+
+function docName(projectId, path) {
+  return `projects/${projectId}/databases/(default)/documents/${path}`;
+}
+
+async function commitRest(projectId, token, writes) {
+  for (let index = 0; index < writes.length; index += 400) {
+    const chunk = writes.slice(index, index + 400);
+    const response = await fetch(`https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents:commit`, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${token}`,
+        "content-type": "application/json"
+      },
+      body: JSON.stringify({ writes: chunk })
+    });
+    if (!response.ok) throw new Error(`Firestore commit failed: ${response.status} ${await response.text()}`);
+  }
+}
+
+async function seedWithRest(projectId) {
+  const token = await accessTokenFromFirebaseTools();
+  const now = new Date().toISOString();
+  const base = `classes/${data.classId}`;
+  const writes = [
+    {
+      update: {
+        name: docName(projectId, base),
+        fields: firestoreFields({
+          title: "2학년 4반 영어시험",
+          sourceSpreadsheetId: "1KgeWu_I4tNdXPwMtVB4Qm8WzLCwB6b0f1Xmnhu0sqg8",
+          updatedAt: now
+        })
+      }
+    },
+    {
+      update: {
+        name: docName(projectId, `${base}/settings/current`),
+        fields: firestoreFields(data.settings)
+      }
+    },
+    {
+      update: {
+        name: docName(projectId, `${base}/rankings/current`),
+        fields: firestoreFields({ rows: data.rankings, updatedAt: now })
+      }
+    },
+    ...data.students.map((student) => ({
+      update: { name: docName(projectId, `${base}/students/${student.id}`), fields: firestoreFields(student) }
+    })),
+    ...data.words.map((word) => ({
+      update: { name: docName(projectId, `${base}/words/${word.id}`), fields: firestoreFields(word) }
+    })),
+    ...data.scoreRecords.map((score) => ({
+      update: {
+        name: docName(projectId, `${base}/scores/${score.id}`),
+        fields: firestoreFields({ ...score, takenAt: score.takenAt, takenAtIso: score.takenAt })
+      }
+    }))
+  ];
+
+  await commitRest(projectId, token, writes);
+}
+
+if (!process.env.GOOGLE_APPLICATION_CREDENTIALS && !process.env.FIREBASE_SERVICE_ACCOUNT_JSON) {
+  await seedWithRest(projectId);
+  console.log(`Seeded class ${data.classId}: ${data.students.length} students, ${data.words.length} words, ${data.scoreRecords.length} score records.`);
+  process.exit(0);
 }
 
 await classRef.set({

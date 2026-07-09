@@ -1,0 +1,17 @@
+{
+  "name": "english-quiz-functions",
+  "private": true,
+  "type": "module",
+  "main": "lib/index.js",
+  "scripts": {
+    "build": "tsc",
+    "deploy": "firebase deploy --only functions"
+  },
+  "dependencies": {
+    "firebase-admin": "^13.0.2",
+    "firebase-functions": "^6.1.2"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.2"
+  }
+}

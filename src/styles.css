@@ -1,0 +1,164 @@
+:root {
+  --bg: #fdfdfd;
+  --primary: #4a69bd;
+  --text: #2f3542;
+}
+
+body {
+  background-color: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  padding-top: 1rem;
+}
+
+.student-container {
+  max-width: 480px;
+}
+
+.card {
+  border: none;
+  border-radius: 24px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.05);
+  margin-bottom: 1rem;
+}
+
+.btn-custom {
+  border-radius: 16px;
+  padding: 14px;
+  font-weight: 600;
+  transition: 0.2s;
+}
+
+.btn-primary {
+  background-color: var(--primary);
+  color: white;
+  border: none;
+}
+
+.btn-primary:active {
+  background-color: #3c52a5;
+}
+
+.text-primary {
+  color: var(--primary) !important;
+}
+
+#studentId {
+  border-radius: 14px;
+}
+
+.top-btn,
+.admin-top-btn {
+  border-radius: 10px;
+}
+
+.avg-circle {
+  width: 90px;
+  height: 90px;
+  border-radius: 50%;
+  border: 5px solid var(--primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 0.5rem;
+  font-size: 1.4rem;
+  font-weight: 800;
+  color: var(--primary);
+}
+
+.wrong-word {
+  display: inline-block;
+  background: #f1f2f6;
+  color: #57606f;
+  padding: 4px 10px;
+  border-radius: 8px;
+  margin: 3px;
+  font-size: 0.85rem;
+}
+
+.option-btn {
+  border-radius: 14px;
+  white-space: pre-line;
+}
+
+#subjectiveInput {
+  border-radius: 14px;
+}
+
+.admin-body {
+  min-height: 100vh;
+  margin-top: -1rem;
+  padding: 15px;
+  background-color: #f8f9fa;
+}
+
+.admin-container {
+  max-width: 800px;
+}
+
+.stat-card {
+  border: none;
+  border-radius: 20px;
+  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.03);
+  background: white;
+  margin-bottom: 15px;
+  display: flex;
+  flex-direction: column;
+}
+
+.rank-list-wrapper {
+  max-height: 300px;
+  overflow-y: auto;
+  padding-right: 5px;
+  margin-top: 10px;
+}
+
+.rank-list-wrapper::-webkit-scrollbar {
+  width: 4px;
+}
+
+.rank-list-wrapper::-webkit-scrollbar-thumb {
+  background-color: #dee2e6;
+  border-radius: 10px;
+}
+
+.rank-item {
+  padding: 8px 0;
+  border-bottom: 1px solid #f8f9fa;
+  font-size: 0.85rem;
+  display: flex;
+  justify-content: space-between;
+}
+
+.rank-item:last-child {
+  border-bottom: none;
+}
+
+.admin-qcount {
+  width: 200px;
+}
+
+.admin-score-table {
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+@media (max-width: 575px) {
+  body {
+    padding-top: 1rem;
+  }
+
+  .admin-body {
+    padding: 15px 8px;
+  }
+
+  .admin-status-line {
+    align-items: stretch !important;
+    gap: 12px;
+    flex-direction: column;
+  }
+
+  .admin-qcount {
+    width: 100%;
+  }
+}

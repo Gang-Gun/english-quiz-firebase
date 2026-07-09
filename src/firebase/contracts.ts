@@ -131,11 +131,11 @@ export async function getStudentQuiz(input: { classId: string; studentId: string
       const settingsSnap = await getDoc(doc(client.db, classPath(input.classId, "settings/current")));
       const wordCount = Math.max(1, Number(settingsSnap.data()?.wordCount ?? 20));
 
-      // A broad set of studied words supplies the multiple-choice distractors.
-      const completedSnap = await getDocs(
-        query(collection(client.db, classPath(input.classId, "words")), where("completed", "==", true), orderBy("number", "desc"), limit(Math.max(wordCount, 60)))
-      );
-      const completed = completedSnap.docs.map((row) => toWordEntry(row.id, row.data()));
+      // Fetch every studied word with a single-field equality filter (no
+      // composite index needed) and order by number on the client. This
+      // doubles as the multiple-choice distractor pool.
+      const completedSnap = await getDocs(query(collection(client.db, classPath(input.classId, "words")), where("completed", "==", true)));
+      const completed = completedSnap.docs.map((row) => toWordEntry(row.id, row.data())).sort((a, b) => b.number - a.number);
 
       if (input.mode === "review") {
         const recentSnap = await getDocs(
